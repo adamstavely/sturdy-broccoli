@@ -6,20 +6,42 @@
  *   npm run test.smoke    # (optionally CHROME_BIN=/path/to/chrome)
  *
  * Verifies the integration seam (navigateHandler), deep-linking + spotlight upgrade,
- * dialog a11y attributes, analytics events, keyboard nav, and content validation.
- * This is a starting point; migrate to @stencil/playwright for a CI-grade suite.
+ * dialog a11y attributes, focus trap + focus restore, analytics events, keyboard nav,
+ * and content validation. This is a starting point; migrate to @stencil/playwright
+ * for a CI-grade suite.
  */
 import http from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname, normalize } from 'node:path';
 import puppeteer from 'puppeteer';
 
 const WWW = join(dirname(fileURLToPath(import.meta.url)), '..', 'www');
-const CHROME = process.env.CHROME_BIN || process.env.PUPPETEER_EXECUTABLE_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.json': 'application/json', '.css': 'text/css', '.map': 'application/json' };
+
+/**
+ * Resolve a Chrome/Chromium binary without hardcoding a path that only exists in one
+ * sandbox. Order: explicit env override -> puppeteer's own managed browser (present on
+ * a normal `npm install`, since `puppeteer` — not `puppeteer-core` — downloads one) ->
+ * a clear, actionable error. We deliberately do NOT fall back to a guessed absolute
+ * path: a wrong-but-present binary silently gives false confidence, and a missing one
+ * should fail loudly instead of picking whatever happens to be on the runner's disk.
+ */
+function resolveExecutablePath() {
+  const override = process.env.CHROME_BIN || process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (override) return override;
+  try {
+    const managed = puppeteer.executablePath();
+    if (managed && existsSync(managed)) return managed;
+  } catch { /* fall through to the error below */ }
+  throw new Error(
+    'No Chrome/Chromium binary found. Either run `npx puppeteer browsers install chrome` ' +
+    '(puppeteer\'s postinstall normally does this automatically), or point at one with ' +
+    'CHROME_BIN=/path/to/chrome npm run test.smoke.'
+  );
+}
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -37,7 +59,7 @@ const ok = (name, cond, extra) => { console.log(`${cond ? '✓' : '✗'} ${name}
 await new Promise(r => server.listen(0, r));
 const base = `http://localhost:${server.address().port}/`;
 
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ executablePath: resolveExecutablePath(), headless: true, args: ['--no-sandbox'] });
 const errors = [];
 try {
   const page = await browser.newPage();
@@ -76,6 +98,40 @@ try {
   await new Promise(r => setTimeout(r, 300));
   const after = await page.evaluate(() => document.querySelector('mcaap-onboarding').shadowRoot.querySelector('.count').textContent);
   ok('ArrowRight advances the step', before !== after, `${before} -> ${after}`);
+
+  // ---- focus management: needs a real DOM, so this lives here rather than in specs ----
+  await page.evaluate(() => { document.querySelector('mcaap-onboarding').close(); });
+  await new Promise(r => setTimeout(r, 200));
+  const focusRestore = await page.evaluate(async () => {
+    const btn = document.getElementById('openMenu');
+    btn.focus();
+    document.querySelector('mcaap-onboarding').open();
+    await new Promise(r => setTimeout(r, 150));
+    const focusedInsideDialogWhileOpen = document.querySelector('mcaap-onboarding').shadowRoot.activeElement != null;
+    document.querySelector('mcaap-onboarding').close();
+    await new Promise(r => setTimeout(r, 150));
+    return { focusedInsideDialogWhileOpen, restoredToTrigger: document.activeElement === btn };
+  });
+  ok('focus moves into the dialog while open', focusRestore.focusedInsideDialogWhileOpen);
+  ok('focus is restored to the trigger element on close', focusRestore.restoredToTrigger);
+
+  const tabTrap = await page.evaluate(async () => {
+    document.querySelector('mcaap-onboarding').open();
+    await new Promise(r => setTimeout(r, 150));
+    const sr = document.querySelector('mcaap-onboarding').shadowRoot;
+    const dlg = sr.querySelector('[role="dialog"]');
+    const items = Array.from(dlg.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+      .filter(el => !el.hasAttribute('disabled') && el.getClientRects().length > 0);
+    const last = items[items.length - 1];
+    last.focus();
+    const evt = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    window.dispatchEvent(evt);
+    await new Promise(r => setTimeout(r, 50));
+    const wrapped = sr.activeElement === items[0];
+    document.querySelector('mcaap-onboarding').close();
+    return wrapped;
+  });
+  ok('Tab wraps from the last focusable back to the first (focus trap)', tabTrap);
 
   ok('no console errors', errors.length === 0, errors.join(' | '));
 } finally {

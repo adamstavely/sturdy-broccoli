@@ -71,6 +71,9 @@ export class McaapOnboarding {
   private prevFocus: HTMLElement | null = null;
   /** Identity of the currently-shown dialog screen; when it changes we move focus into it. */
   private lastFocusKey = '';
+  /** Bumped on every enterStep(); lets a stale async target-poll loop detect it has
+   * been superseded (e.g. the user mashed Next/Prev) and stop instead of racing. */
+  private stepToken = 0;
 
   // ---- analytics events (bubble + composed, so host listeners on document catch them) ----
   @Event() mcaapTourStarted!: EventEmitter<{ id: string; title: string }>;
@@ -83,6 +86,8 @@ export class McaapOnboarding {
   // ---- public API ----
   @Method() async open() { this.mode = 'menu'; }
   @Method() async start(id: string) { this.beginTour(id); }
+  /** Close whatever screen (welcome / menu / tour / done) is currently open. */
+  @Method() async close() { this.closeInternal(); }
 
   private get tour(): Tour | undefined { return TOURS.find(t => t.id === this.tourId); }
 
@@ -147,6 +152,14 @@ export class McaapOnboarding {
   // ---- flow ----
   private beginTour(id?: string) {
     if (!TOURS.some(t => t.id === id)) return;
+    // @Watch('mode') only fires on an actual mode *change*. Jumping straight from one
+    // tour into another (e.g. a host "start this tour" button used mid-tour) stays in
+    // 'tour' -> 'tour', so it would never see the abandonment. Emit it explicitly here
+    // so the analytics funnel doesn't silently drop it.
+    if (this.mode === 'tour' && this.tour) {
+      const prev = this.tour;
+      this.mcaapTourSkipped.emit({ id: prev.id, step: this.step + 1, total: prev.steps.length });
+    }
     this.tourId = id!; this.step = 0; this.mode = 'tour';
     this.seenWelcome = true; this.saveState();
     const t = this.tour!;
@@ -163,13 +176,24 @@ export class McaapOnboarding {
     if (page === 'agents' || page === 'tasks-fleet') { w.__goAgents ? w.__goAgents() : w.__setPage?.('tasks'); return; }
     w.__setPage?.(page);
   }
+  /** Does this CSS selector currently resolve to an element? Single source of truth
+   * for "is this spotlight target on the page", used by enterStep/viewTour/checkAnchors. */
+  private targetResolves(sel?: string | null): boolean {
+    if (!sel) return false;
+    try { return !!document.querySelector(sel); } catch { return false; } // guards a malformed selector
+  }
   private enterStep() {
+    // Invalidate any still-running poll loop from a previous enterStep() call (e.g. the
+    // user pressed Next/Prev again before the old target-poll finished) so it can't
+    // land a stale tick()/layout() after this one has already taken over.
+    const token = ++this.stepToken;
     const t = this.tour!, s = t.steps[this.step];
     this.mcaapTourStep.emit({ id: t.id, step: this.step + 1, total: t.steps.length, title: s.title });
     if (s.page) this.navigateTo(s.page);
     let tries = 0;
     const attempt = () => {
-      const found = !s.target || !!document.querySelector(s.target);
+      if (token !== this.stepToken) return; // superseded by a newer enterStep()
+      const found = !s.target || this.targetResolves(s.target);
       // Bump `tick` so Stencil re-renders now that the target exists: this upgrades
       // the step from the centered fallback card to the spotlight coach-mark.
       if (found || tries > 28) {
@@ -193,11 +217,14 @@ export class McaapOnboarding {
     this.mcaapTourCompleted.emit({ id: t.id, title: t.title });
     this.mode = 'done';
   }
-  private close() { this.mode = 'closed'; this.tourId = null; }
+  private closeInternal() { this.mode = 'closed'; this.tourId = null; }
+  private resetProgress() {
+    this.completed = {}; this.neverShow = false; this.seenWelcome = false; this.saveState();
+  }
 
   private handleKey(e: KeyboardEvent) {
     if (this.mode === 'closed') return;
-    if (e.key === 'Escape') { e.preventDefault(); this.close(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); this.closeInternal(); return; }
     if (e.key === 'Tab') { this.trapTab(e); return; }
     if (this.mode !== 'tour') return;
     if (e.key === 'ArrowRight') { e.preventDefault(); this.next(); }
@@ -277,7 +304,7 @@ export class McaapOnboarding {
   private checkAnchors(): { found: string[]; missing: string[] } {
     const targets = Array.from(new Set(TOURS.flatMap(t => t.steps.map(s => s.target).filter(Boolean) as string[])));
     const found: string[] = [], missing: string[] = [];
-    targets.forEach(sel => (document.querySelector(sel) ? found : missing).push(sel));
+    targets.forEach(sel => (this.targetResolves(sel) ? found : missing).push(sel));
     return { found, missing };
   }
   /**
@@ -356,7 +383,7 @@ export class McaapOnboarding {
       <div class="wrap">
         <div class="catch" />
         <div class="centerwrap"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mo-welcome-title" aria-describedby="mo-welcome-desc" tabindex={-1}>
-          <button class="btn btn-icon close" onClick={() => this.close()} aria-label="Close">{Icon('x', 17)}</button>
+          <button class="btn btn-icon close" onClick={() => this.closeInternal()} aria-label="Close">{Icon('x', 17)}</button>
           <div class="mhead">
             <div class="mhero" innerHTML={ILLUS.welcome} aria-hidden="true" />
             <div class="eyebrow"><span class="dot" />Guided tour</div>
@@ -371,7 +398,7 @@ export class McaapOnboarding {
             <div class="skiprow" style={{ padding: '18px 0 0' }}>
               <label class="chk"><input type="checkbox" checked={this.neverShow}
                 onInput={(e: any) => { this.neverShow = e.target.checked; this.seenWelcome = true; this.saveState(); }} /> Don’t show this again</label>
-              <button class="btn btn-text" onClick={() => this.close()}>Skip for now</button>
+              <button class="btn btn-text" onClick={() => this.closeInternal()}>Skip for now</button>
             </div>
           </div>
         </div></div>
@@ -447,7 +474,7 @@ export class McaapOnboarding {
               <div class="mtitle" id="mo-menu-title" style={{ fontSize: '20px', margin: '0' }}>Tutorials</div>
               <div class="mtext" id="mo-menu-desc" style={{ fontSize: '13px', marginTop: '3px' }}>{doneCount} of {TOURS.length} completed. Replay any tutorial anytime.</div>
             </div>
-            <button class="btn btn-icon" onClick={() => this.close()} aria-label="Close">{Icon('x', 17)}</button>
+            <button class="btn btn-icon" onClick={() => this.closeInternal()} aria-label="Close">{Icon('x', 17)}</button>
           </div>
           <div class="menu-tabs">
             <div class="seg">
@@ -459,7 +486,7 @@ export class McaapOnboarding {
             {body}
             <div class="menu-foot">
               <span style={{ fontSize: '11.5px', color: '#94A3B8' }}>Use <span class="kbd">←</span> <span class="kbd">→</span> to navigate · <span class="kbd">Esc</span> to close</span>
-              <button class="btn btn-text" onClick={() => { this.completed = {}; this.neverShow = false; this.seenWelcome = false; this.saveState(); }}>Reset progress</button>
+              <button class="btn btn-text" onClick={() => this.resetProgress()}>Reset progress</button>
             </div>
           </div>
         </div></div>
@@ -469,12 +496,12 @@ export class McaapOnboarding {
 
   private viewTour() {
     const t = this.tour!, s = t.steps[this.step], total = t.steps.length;
-    const hasTarget = !!(s.target && document.querySelector(s.target));
+    const hasTarget = this.targetResolves(s.target);
     const pct = Math.round(((this.step + 1) / total) * 100);
     const last = this.step >= total - 1;
     const card = (
       <div class={{ card: true, center: !hasTarget }} role="dialog" aria-modal="true" aria-labelledby="mo-tour-title" aria-describedby="mo-tour-desc" tabindex={-1}>
-        <button class="btn btn-icon close" onClick={() => this.close()} aria-label="Close tour">{Icon('x', 16)}</button>
+        <button class="btn btn-icon close" onClick={() => this.closeInternal()} aria-label="Close tour">{Icon('x', 16)}</button>
         <p class="sr-only" aria-live="polite">{`Step ${this.step + 1} of ${total}`}</p>
         <div class="illus" innerHTML={ILLUS[s.illus] || ILLUS.welcome} aria-hidden="true" />
         <div class="body">
@@ -494,7 +521,7 @@ export class McaapOnboarding {
         </div>
         <div class="skiprow">
           <button class="btn btn-text" onClick={() => (this.mode = 'menu')}>All tours</button>
-          <button class="btn btn-text" onClick={() => this.close()}>Skip tour</button>
+          <button class="btn btn-text" onClick={() => this.closeInternal()}>Skip tour</button>
         </div>
       </div>
     );
@@ -510,7 +537,7 @@ export class McaapOnboarding {
       <div class="wrap">
         <div class="catch" />
         <div class="centerwrap"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mo-done-title" aria-describedby="mo-done-desc" tabindex={-1}>
-          <button class="btn btn-icon close" onClick={() => this.close()} aria-label="Close">{Icon('x', 17)}</button>
+          <button class="btn btn-icon close" onClick={() => this.closeInternal()} aria-label="Close">{Icon('x', 17)}</button>
           <div class="mhead">
             <div class="mhero" innerHTML={ILLUS.celebrate} aria-hidden="true" />
             <div class="eyebrow"><span class="dot" />Tour complete</div>
@@ -520,7 +547,7 @@ export class McaapOnboarding {
           <div class="mbody"><div class="mactions">
             {nextT && <button class="btn btn-primary btn-lg" onClick={() => this.beginTour(nextT.id)}>Next: {nextT.title} {Icon('arrow_right', 16)}</button>}
             <button class="btn btn-ghost btn-lg" onClick={() => (this.mode = 'menu')}>{Icon('map', 16)}All tours</button>
-            <button class="btn btn-text btn-lg" onClick={() => this.close()}>Done</button>
+            <button class="btn btn-text btn-lg" onClick={() => this.closeInternal()}>Done</button>
           </div></div>
         </div></div>
       </div>

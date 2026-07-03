@@ -1,10 +1,24 @@
-# MCAAP Onboarding — Stencil source
+# MCAAP Onboarding
+
+This repo holds **two implementations of the same guided-tour feature**. They exist
+side by side on purpose — read this section before touching either one.
+
+| | Use for | Files |
+|---|---|---|
+| **`src/` (Stencil component)** ✅ **build on this** | New integration work, the real app, any future changes to tour content or behaviour. | `src/`, `angular/`, `test/`, `package.json`, `stencil.config.ts` |
+| **`onboarding.js` + `onboarding-tours.js`** (legacy prototype) | Reference / parity-checking only. This is the original vanilla-JS engine the Stencil component was lifted out of — kept so behaviour can be diffed against the original, **not** a second thing to ship. | Two files at the repo root |
+
+If you're integrating onboarding into an app, or changing tour copy/steps/behaviour,
+**work in `src/components/mcaap-onboarding/`** and build with the instructions below.
+Do not edit the two prototype files to make product changes — they're a frozen
+reference, not a maintained codebase; changes there will not reach the real component.
+
+## The Stencil component
 
 Clean, buildable [Stencil](https://stenciljs.com/) source for the `<mcaap-onboarding>`
-guided-tour web component. This is the "lift-out" version of the live tour running
-in the prototype (`/onboarding.js` + `/onboarding-tours.js`) — same states, same
-behaviour, authored as a proper Stencil component you can compile and drop into any
-app (React, Angular, Vue, or plain HTML).
+guided-tour web component — the same states and behaviour as the prototype, authored as
+a proper Stencil component you can compile and drop into any app (React, Angular, Vue,
+or plain HTML).
 
 ## What it does
 
@@ -92,6 +106,16 @@ window.dispatchEvent(new CustomEvent('mcaap-tour:start', { detail: { id: 'cleara
 
 It also auto-shows the welcome modal ~0.9s after first load, unless the user has
 completed it or ticked "don't show again".
+
+You can also call the component's methods directly instead of firing window events:
+
+```js
+const onb = document.querySelector('mcaap-onboarding');
+await onb.open();               // open the tour menu
+await onb.start('clearance');   // jump straight into a specific tour
+await onb.close();              // close whatever screen is currently open
+await onb.validate();           // see "Validate the wiring" below
+```
 
 ### Analytics
 

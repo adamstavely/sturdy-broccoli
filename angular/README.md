@@ -54,5 +54,5 @@ export class AppComponent {
 
 Add `CUSTOM_ELEMENTS_SCHEMA` is **not** required — the wrapper is a real Angular
 component. Inputs: `debug`, `navigateHandler`. Methods: `open()`, `start(id)`,
-`validate()`. Outputs: `mcaapTourStarted`, `mcaapTourStep`, `mcaapTourCompleted`,
-`mcaapTourSkipped`, `mcaapNavigate`.
+`close()`, `validate()`. Outputs: `mcaapTourStarted`, `mcaapTourStep`,
+`mcaapTourCompleted`, `mcaapTourSkipped`, `mcaapNavigate`.

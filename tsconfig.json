@@ -4,6 +4,7 @@
     "allowUnreachableCode": false,
     "declaration": false,
     "experimentalDecorators": true,
+    "strict": true,
     "lib": ["dom", "es2018"],
     "moduleResolution": "node",
     "esModuleInterop": true,
