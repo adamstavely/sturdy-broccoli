@@ -1,0 +1,19 @@
+{
+  "name": "mcaap-onboarding-angular-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ng-packagr build for the mcaap-onboarding Angular wrapper",
+  "scripts": {
+    "build": "ng-packagr -p projects/mcaap-onboarding/ng-package.json -c projects/mcaap-onboarding/tsconfig.lib.json"
+  },
+  "devDependencies": {
+    "@angular/compiler": "^17.0.0",
+    "@angular/compiler-cli": "^17.0.0",
+    "@angular/core": "^17.0.0",
+    "ng-packagr": "^17.0.0",
+    "rxjs": "^7.8.0",
+    "tslib": "^2.6.0",
+    "typescript": "~5.4.0",
+    "zone.js": "~0.14.0"
+  }
+}

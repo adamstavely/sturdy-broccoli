@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mcaap-onboarding — demo shell</title>
+  <link rel="icon" href="data:," />
+  <!-- Built component (served by `npm start` / the www output target) -->
+  <script type="module" src="/build/mcaap-onboarding.esm.js"></script>
+  <script nomodule src="/build/mcaap-onboarding.js"></script>
+  <style>
+    :root { font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; color: #24272D; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #F4F7FC; }
+    /* persistent app chrome — the tour spotlights these header anchors from every page */
+    .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 18px;
+      padding: 10px 18px; background: #fff; border-bottom: 1px solid #E2E8F0; }
+    .brand { font-weight: 800; letter-spacing: -.02em; }
+    .brand span { color: #94A3B8; font-weight: 500; }
+    .nav { display: flex; gap: 6px; }
+    .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    button { font: inherit; cursor: pointer; border: 1px solid #E2E8F0; background: #fff; color: #24272D;
+      border-radius: 9px; padding: 8px 12px; }
+    button:hover { background: #F1F5F9; }
+    .fleet .badge { background: #0073E6; color: #fff; border-radius: 20px; padding: 1px 7px; font-size: 12px; margin-left: 4px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: #1D3557; color: #fff; border: 0; }
+    #helpBtn { width: 36px; height: 36px; border-radius: 50%; font-weight: 700; }
+    .layout { display: grid; grid-template-columns: 260px 1fr; gap: 18px; padding: 18px; align-items: start; }
+    .panel { position: sticky; top: 74px; background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; }
+    .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #94A3B8; margin: 0 0 8px; }
+    .panel select, .panel button { width: 100%; margin-bottom: 8px; }
+    .log { font: 12px/1.5 ui-monospace, Menlo, monospace; background: #0D192A; color: #CBD5E1;
+      border-radius: 10px; padding: 10px; height: 220px; overflow: auto; white-space: pre-wrap; }
+    .log b { color: #6BB4FF; } .log .ok { color: #52D39B; } .log .warn { color: #F6C560; }
+    main { min-height: 70vh; background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 20px; }
+    .pagehd { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .pagehd h1 { font-size: 22px; margin: 0; }
+    .pagehd .spacer { margin-left: auto; }
+    .pill { display: inline-flex; gap: 8px; border: 1px solid #E2E8F0; border-radius: 10px; padding: 8px 12px; background: #F8FAFC; }
+    .primary { background: #1D3557; color: #fff; border-color: #1D3557; }
+    .blurb { color: #475569; line-height: 1.6; background: #F8FAFC; border: 1px solid #EEF2F7; border-radius: 10px; padding: 12px 14px; }
+    .grid { display: grid; gap: 12px; margin-top: 14px; }
+    .cols-3 { grid-template-columns: repeat(3, 1fr); } .cols-4 { grid-template-columns: repeat(4, 1fr); }
+    .box { border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px; background: #fff; min-height: 90px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #EEF2F7; font-size: 14px; }
+    .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+    .board .col { background: #F8FAFC; border: 1px solid #EEF2F7; border-radius: 12px; padding: 10px; min-height: 160px; }
+    .drop { border: 2px dashed #93C5FD; border-radius: 12px; padding: 28px; text-align: center; color: #64748B; background: #F8FBFF; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">MCAAP <span>· demo shell</span></div>
+    <nav class="nav">
+      <button data-tour="nav-explore" data-go="explore">Explore</button>
+      <button data-tour="nav-tasks" data-go="tasks-board">Tasks</button>
+      <button data-tour="nav-workspaces" data-go="clearance">Workspaces ▾</button>
+      <button data-tour="termbase" data-go="dashboard">Term base</button>
+    </nav>
+    <div class="right">
+      <button class="fleet" data-tour="agents">Fleet <span class="badge">3</span></button>
+      <button id="helpBtn" data-tour="help" title="Help &amp; tours">?</button>
+      <button class="avatar" data-tour="avatar">AS</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="panel">
+      <h2>Drive the tour</h2>
+      <button id="openMenu">Open tour menu</button>
+      <select id="tourPick">
+        <option value="">Start a tour…</option>
+        <option value="getting-started">Getting Started</option>
+        <option value="tasks-agents">Tasks &amp; AI Agents</option>
+        <option value="clearance">Clearance</option>
+        <option value="memos">Memos</option>
+        <option value="prep">Prep</option>
+        <option value="briefings">Briefing Books</option>
+        <option value="language">Language Exploitation</option>
+        <option value="upload">Data Upload</option>
+        <option value="triage">Triage</option>
+        <option value="explore">Explore &amp; Search</option>
+      </select>
+      <button id="validateBtn">Validate content + anchors</button>
+      <button id="resetBtn">Reset progress</button>
+      <h2 style="margin-top:14px">Event log</h2>
+      <div class="log" id="log"></div>
+    </aside>
+
+    <main id="main"><!-- page content injected by navigate() --></main>
+  </div>
+
+  <!-- drop the component once, near the end of body -->
+  <mcaap-onboarding debug></mcaap-onboarding>
+
+  <script>
+    // ---- event log (declared first so navigate() can log during init) ----
+    const logEl = document.getElementById('log');
+    function log(html) { logEl.innerHTML += html + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+
+    // ---- page templates: only the active page's anchors are ever in the DOM ----
+    const TEMPLATES = {
+      dashboard: `
+        <div class="pagehd"><h1>Dashboard</h1></div>
+        <p class="blurb">This is the demo shell's home. The Getting Started tour spotlights the
+        header chrome above — Explore, Tasks, Workspaces, Term base, Fleet, your avatar and the “?” help button.</p>`,
+      tasks: `
+        <div class="pagehd">
+          <h1 data-tour="tasks-title">Tasks</h1>
+          <span class="spacer"></span>
+          <span class="pill" data-tour="tasks-views">Board · List · Calendar</span>
+          <button class="primary" data-tour="tasks-new">+ New Request</button>
+        </div>
+        <div class="pill" data-tour="tasks-workflows">Press clearance · Relevance coding · Brief review · Privilege</div>
+        <div class="pill" data-tour="tasks-assignee" style="margin-left:8px">People / AI Agents</div>
+        <div class="board" data-tour="tasks-board">
+          <div class="col"><b>Backlog</b></div><div class="col"><b>Doing</b></div>
+          <div class="col"><b>Review</b></div><div class="col"><b>Done</b></div>
+        </div>`,
+      workspace: `
+        <div class="pagehd">
+          <h1 data-tour="ws-header" id="wsTitle">Workspace</h1>
+          <span class="spacer"></span>
+          <button class="primary" data-tour="ws-action">Primary action</button>
+        </div>
+        <p class="blurb" data-tour="ws-blurb">What this workspace does and what it protects against.</p>
+        <div class="pill" data-tour="ws-scope" style="margin-top:12px">Assigned to me · My team · All</div>
+        <table data-tour="ws-table">
+          <thead><tr><th>Item</th><th>Stage</th><th>Owner</th></tr></thead>
+          <tbody><tr><td>Statement 1042</td><td>Screening</td><td>AS</td></tr>
+          <tr><td>Statement 1043</td><td>Review</td><td>JM</td></tr></tbody>
+        </table>`,
+      briefings: `
+        <div class="pagehd">
+          <h1 data-tour="ws-header">Briefing Books</h1>
+          <span class="spacer"></span>
+          <button class="primary" data-tour="ws-action">New book</button>
+        </div>
+        <div class="grid cols-4" data-tour="brief-stats">
+          <div class="box"><b>12</b><br>Building</div><div class="box"><b>34</b><br>Distributed</div>
+          <div class="box"><b>8</b><br>Awaiting</div><div class="box"><b>4.6</b><br>Avg rating</div>
+        </div>
+        <div class="pill" data-tour="brief-views" style="margin-top:12px">Queue · History</div>
+        <div class="grid cols-3" data-tour="brief-grid">
+          <div class="box">Book A</div><div class="box">Book B</div><div class="box">Book C</div>
+        </div>`,
+      knowledge: `
+        <div class="pagehd">
+          <h1 data-tour="ws-header">Language Exploitation</h1>
+          <span class="spacer"></span>
+          <button class="primary" data-tour="ws-action">Capture knowledge</button>
+        </div>
+        <p class="blurb" data-tour="lang-banner">Turn what your team knows into shared, endorsed articles.</p>
+        <div class="grid cols-3" style="margin-top:12px">
+          <div class="box" data-tour="lang-articles" style="grid-column:span 2">Knowledge articles…</div>
+          <div class="box" data-tour="lang-sources">Connected sources</div>
+        </div>
+        <div class="box" data-tour="lang-capture" style="margin-top:12px">Suggested captures (stuck knowledge)</div>`,
+      upload: `
+        <div class="pagehd"><h1 data-tour="ws-header">Data Upload</h1></div>
+        <div class="grid cols-3">
+          <div class="box" data-tour="upload-details" style="grid-column:span 2">Dataset details — name, source, category, classification</div>
+          <div class="box" data-tour="upload-checklist">Intake checklist</div>
+        </div>
+        <div class="drop" data-tour="upload-files">Drag files here (TIFF, CSV, GeoJSON, PDF, ZIP)</div>`,
+      explore: `
+        <div class="pagehd"><h1>Explore &amp; Search</h1></div>
+        <div class="pill" data-tour="explore-search" style="width:100%">🔍 Search across everything — or ask in plain language (AI Mode)</div>
+        <div class="pill" data-tour="explore-tabs" style="margin-top:12px">Results · Map · Subscriptions</div>
+        <div class="grid cols-4" data-tour="explore-browse">
+          <div class="box">Collections</div><div class="box">Topics</div>
+          <div class="box">Devices</div><div class="box">People</div>
+        </div>`,
+    };
+    // page hint (from tours.ts) -> which template to show
+    const PAGE_FOR = {
+      dashboard: 'dashboard', 'tasks-board': 'tasks',
+      clearance: 'workspace', memos: 'workspace', prep: 'workspace', review: 'workspace',
+      briefings: 'briefings', knowledge: 'knowledge', upload: 'upload', explore: 'explore',
+    };
+    const WS_TITLE = { clearance: 'Clearance', memos: 'Memos', prep: 'Prep', review: 'Triage' };
+
+    const main = document.getElementById('main');
+    function showPage(page) {
+      main.innerHTML = TEMPLATES[PAGE_FOR[page] || 'dashboard'] || TEMPLATES.dashboard;
+      const t = main.querySelector('#wsTitle');
+      if (t && WS_TITLE[page]) t.textContent = WS_TITLE[page];
+      log('<b>navigate</b> → ' + page);
+    }
+    showPage('dashboard');
+
+    // header nav also drives the shell (so anchors are clickable in the demo)
+    document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showPage(b.dataset.go)));
+
+    // ---- wire the component ----
+    const onb = document.querySelector('mcaap-onboarding');
+    customElements.whenDefined('mcaap-onboarding').then(() => {
+      onb.navigateHandler = showPage;          // <-- the single integration seam
+    });
+    document.getElementById('helpBtn').addEventListener('click', () => onb.open());
+    document.getElementById('openMenu').addEventListener('click', () => onb.open());
+    document.getElementById('validateBtn').addEventListener('click', () => onb.validate());
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      localStorage.removeItem('mcaap.onboarding.v1'); log('<span class="warn">progress reset — reload to see welcome</span>');
+    });
+    document.getElementById('tourPick').addEventListener('change', e => { if (e.target.value) onb.start(e.target.value); });
+
+    // ---- event log listeners (proves section 7 analytics) ----
+    ['mcaapTourStarted', 'mcaapTourStep', 'mcaapTourCompleted', 'mcaapTourSkipped', 'mcaapNavigate']
+      .forEach(name => document.addEventListener(name, e => log('<b>' + name + '</b> ' + JSON.stringify(e.detail))));
+  </script>
+</body>
+</html>

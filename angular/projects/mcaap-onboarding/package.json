@@ -1,0 +1,14 @@
+{
+  "name": "mcaap-onboarding-angular",
+  "version": "1.0.0",
+  "description": "Angular standalone-component wrapper for the <mcaap-onboarding> web component",
+  "license": "MIT",
+  "sideEffects": false,
+  "peerDependencies": {
+    "@angular/core": ">=16.0.0",
+    "mcaap-onboarding": "^1.0.0"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  }
+}
